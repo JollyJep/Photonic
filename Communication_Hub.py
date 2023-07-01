@@ -1,61 +1,66 @@
-import requests as rq
-import win_precise_time as wpt
-import sacn
 import queue
+import threading as th
+import time
+import sacn
+import win_precise_time as wpt
+
+def Communication_Daemon(comms_queue_1, comms_queue_2, comms_queue_3, comms_queue_4, kill_switch, protocol, next_prot_queue, event):
+    while len(kill_switch.qsize()) == 0:
+        if len(next_prot_queue) != 0:
+            protocol_new = next_prot_queue.get()
+            if protocol_new != protocol:
+                comms_queue_1.put(protocol)
+                comms_queue_2.put(protocol)
+                comms_queue_3.put(protocol)
+        event.wait(0.05)
+    exit()
+
+def WLED (comms_queue_1, kill_switch):
+    pass
+
+def Air_DMX (comms_queue_2, comms_queue_4, kill_switch, framerate):
+    start = True
+    is_active = False
+    sender = sacn.sACNsender(fps=framerate)
+    sender.start()
+    sender[1].destination = "192.168.0.10"
+    sender[2].destination = "192.168.0.10"
+    data_1 = [0, 0, 0] * 150
+    data_2 = [0, 0, 0] * 50
+    while len(kill_switch.qsize()) == 0:
+        try:
+            protocol = comms_queue_2.get(blocking=False)
+        except:
+            protocol = "null"
+        if protocol != "E1.31" or protocol !="null":
+            start = True
+            if is_active:
+                comms_queue_4.put(False)
+                wpt.sleep(0.1)
+                sender.deactivate_output(1)
+                sender.deactivate_output(2)
+                is_active = False
+        else:
+            if start:
+                sender.activate_output(1)
+                sender.activate_output(2)
+                start = False
+                is_active = True
+                data_1 = [0, 0, 0] * 150
+                data_2 = [0, 0, 0] * 50
+                sender[1].dmx_data = data_1
+                sender[2].dmx_data = data_2
+                for x in range(120):
+                    init_time = wpt.time()
+                    data_1 = [0, 0, int(255 * (x /255)/(120/255))] * 150
+                    data_2 = [0, 0, int(255 * (x /255)/(120/255))] * 50
+                    wpt.sleep(1/60 - (wpt.time()-init_time))
+                comms_queue_4.put(True)
 
 
-class Communication_System:
-    def __init__(self, devices, comms_queue, framerate=30, universes=(1,2)):
-        self.devices = devices      #List of devices, contains local addresses, number of LEDS etc
-        self.comms = comms_queue    #Threading queue for inter code communications
-        self.framerate = framerate      # Maximum framerate for E1.13 protocol, irrelevent for other protocols. Also determines inter code comm check time
-        self.air_dmx = sacn.sACNsender(fps=framerate)
-        self.switch = 0     #Turns on/off each system, takes values of 1,2,3 when streaming data
-        self.ledfx_url = "http://localhost:8888"
-        response = rq.get(f"{self.ledfx_url}/api/devices")
-        self.ledfx_devices = response.json()
-        self.universes = universes
-        self.initialise = True
 
 
-    def inter_code_comms(self):
-        live = True
-        while live:
-            frame_start = wpt.time()
-            try:
-                local_data = self.comms.get(block=False)
-                if type(local_data) == bool:
-                    live = False
-                    break
-                else:
-                    self.protocol = local_data[0]
-                    self.protocol_handler(local_data)
-                    local_data = ""
-                wpt.sleep(1 / self.framerate * self.mult - (wpt.time() - frame_start))
-            except:
-                wpt.sleep(1 / self.framerate * self.mult -(wpt.time()-frame_start))
 
 
-    def protocol_handler(self, data):
-        if self.protocol == "E1.31":
-            if self.switch != 1:
-                if self.switch == 2:
-                    for device in self.ledfx_devices:
-                        if device["config"]["type"] == "wled":
-                            device_id = device["id"]
-                            rq.delete(f"{self.ledfx_url}/api/devices/{device_id}/effects/active")
-                self.switch = 1
-                self.air_dmx.start()
-                self.initialise = True
-            self.wireless_DMX(data)
-        elif self.protocol == "LEDfx":
-            if self.switch != 2:
-                if self.switch == 1:
-                    self.air_dmx.deactivate_output(1)
-                self.switch = 2
-                self.
 
-    def wireless_DMX(self, data):
-        if self.initialise:
-            self.initialise = False
-
+event = th.Event()
