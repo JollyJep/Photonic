@@ -8,7 +8,7 @@ import win_precise_time as wpt
 from Lighting_Modules_Air_DMX import Background as bg
 
 def Communication_Daemon(comms_queue_1, comms_queue_2, comms_queue_3, comms_queue_4, kill_switch, protocol, next_prot_queue, event):
-    while len(kill_switch.qsize()) == 0:
+    while kill_switch.qsize() == 0:
         if len(next_prot_queue) != 0:
             protocol_new = next_prot_queue.get()
             if protocol_new != protocol:
@@ -26,16 +26,19 @@ def Air_DMX (comms_queue_2, comms_queue_4, kill_switch, framerate, universes):
     is_active = False
     sender = sacn.sACNsender(fps=framerate)
     sender.start()
-    sender[1].destination = "192.168.0.10"
-    sender[2].destination = "192.168.0.10"
-    while len(kill_switch.qsize()) == 0:
+    sender.activate_output(1)
+    sender.activate_output(2)
+    sender[1].destination = "127.0.0.1"
+    sender[2].destination = "127.0.0.1"
+    while kill_switch.qsize() == 0:
         try:
-            protocol = comms_queue_2.get(blocking=False)
+            #protocol = comms_queue_2.get(blocking=False)
+            protocol = "E1.31"
         except:
             protocol = "null"
             wpt.sleep(0.2)
-        if protocol != "E1.31" or protocol !="null":
-            start = True
+        if protocol != "E1.31" and protocol !="null":
+            print("here")
             if is_active:
                 comms_queue_4.put(False)
                 wpt.sleep(0.1)
@@ -55,9 +58,11 @@ def Air_DMX (comms_queue_2, comms_queue_4, kill_switch, framerate, universes):
                     colour_RGB = np.array([0, 0, int(255 * (x /255)/(2 * framerate/255))])
                     colour_RGBW = np.array([0, 0, int(255 * (x / 255) / (2 * framerate / 255)), 0])
                     RGB_data, RGBW_data = Flat_Colour_Operator(universes, colour_RGB, colour_RGBW)
+                    #print(RGB_data)
                     Air_DMX_Output(sender, universes, RGB_data, RGBW_data)
                     wpt.sleep(1/framerate - (wpt.time()-init_time))
                 comms_queue_4.put(True)
+                #exit()
 
 
 def Flat_Colour_Operator(universes, colour_RGB=np.array([0,0,0],dtype=np.uint8), colour_RGBW=np.array([0,0,0,0],dtype=np.uint8)):   # Also used for universe initialisation
@@ -65,13 +70,13 @@ def Flat_Colour_Operator(universes, colour_RGB=np.array([0,0,0],dtype=np.uint8),
     RGBW_data = np.zeros((0,4),dtype=np.uint8)
     for count, universe in enumerate(universes):
         if universe[1] == "RGB":
-            np.append(RGB_data, np.full(universe[0], colour_RGB))
+            RGB_data = np.append(RGB_data, np.full((int(universe[0]), 3), colour_RGB), axis=0)
         elif universe[1] == "RGBW":
-            np.append(RGBW_data, np.full(universe[0], colour_RGBW))
+            RGBW_data = np.append(RGBW_data, np.full((int(universe[0]), 4), colour_RGBW), axis=0)
     return RGB_data, RGBW_data
 
 
-def Universe_Masker(universes, keep_list, RGB_data, RGBW_data): #Works similar to boolean alpha channel
+def Universe_Masker(universes, keep_list, RGB_data, RGBW_data): #Works similar to boolean alpha channel (Either 0 light output or previous data, allows for universe separation)
     RGB_universes = universes[universes[:, 1] == "RGB"]
     RGBW_universes = universes[universes[:, 1] == "RGBW"]
 
@@ -95,11 +100,11 @@ def Universe_Masker(universes, keep_list, RGB_data, RGBW_data): #Works similar t
 def Air_DMX_Output(sender, universes, RGB_data, RGBW_data):
     last_index_RGB = 0
     last_index_RGBW = 0
-    for count, target in universes:
+    for count, target in enumerate(universes):
         if target[1] == "RGB":
-            sender[count + 1].dmx_data = RGB_data[last_index_RGB :last_index_RGB  + target[0]].tolist()
+            sender[count + 1].dmx_data = RGB_data[last_index_RGB:last_index_RGB + int(target[0])].flatten().tolist()
         elif target[1] == "RGBW":
-            sender[count + 1].dmx_data = RGBW_data[last_index_RGBW:last_index_RGBW + target[0]].tolist()
+            sender[count + 1].dmx_data = RGBW_data[last_index_RGBW:last_index_RGBW + int(target[0])].flatten().tolist()
 
 
 
@@ -107,7 +112,7 @@ def Air_DMX_Output(sender, universes, RGB_data, RGBW_data):
 def Air_DMX_Streamer (comms_queue_4, kill_switch):
     status = False
     pattern = "Bg"
-    while len(kill_switch.qsize()) == 0:
+    while kill_switch.qsize() == 0:
         if not status:
             status = comms_queue_4.get()
         else:
@@ -118,5 +123,13 @@ def Air_DMX_Streamer (comms_queue_4, kill_switch):
             #if status:
 
 
-universes = np.array([[150, "RGB", 1], [50, "RGB", 2]])
-event = th.Event()
+if __name__ == "__main__":
+    comms_queue_1 = queue.Queue()
+    comms_queue_2 = queue.Queue()
+    comms_queue_3 = queue.Queue()
+    comms_queue_4 = queue.Queue()
+    kill_switch = queue.Queue()
+    framerate = 60
+    comms_queue_2.put("E1.31")
+    universes = np.array([[150, "RGB", 1], [50, "RGB", 2]])
+    th.Thread(target=Air_DMX, args=(comms_queue_2, comms_queue_4, kill_switch, framerate, universes)).start()
