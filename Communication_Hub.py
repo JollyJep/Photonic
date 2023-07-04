@@ -15,7 +15,7 @@ def Communication_Daemon(comms_queue_1, comms_queue_2, comms_queue_3, comms_queu
                 comms_queue_1.put(protocol)
                 comms_queue_2.put(protocol)
                 comms_queue_3.put(protocol)
-        event.wait(0.05)
+        wpt.sleep(0.05)
     exit()
 
 def WLED (comms_queue_1, kill_switch):
@@ -26,7 +26,7 @@ def Air_DMX (comms_queue_2, comms_queue_4, kill_switch, framerate, universes):
     is_active = False
     sender = sacn.sACNsender(fps=framerate)
     sender.start()
-    sender.activate_output(1)
+    sender.activate_output(1)           # Needs to be made variable. Only hard coded for now
     sender.activate_output(2)
     sender[1].destination = "127.0.0.1"
     sender[2].destination = "127.0.0.1"
