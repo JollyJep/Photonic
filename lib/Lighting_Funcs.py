@@ -36,3 +36,39 @@ def Universe_Masker(universes, keep_list, RGB_data, RGBW_data): #Works similar t
                 number += RGBW_universes[x, 0]
             RGBW_data[number:number + RGBW_universes[pos, 0]] = np.zeros((RGBW_universes[pos, 0], 4))
     return RGB_data, RGBW_data
+
+def convert_RGB_RGBW(colour_RGB):   # Converts base RGB to an RGBW array, no colour change
+    return np.append(colour_RGB, 0)
+
+def convert_RGBW_RGB(colour_RGBW):  # Approximation to convert from RGBW to RGB
+    red = int(colour_RGBW[0])+ int(colour_RGBW[3])
+    blue = int(colour_RGBW[1]) + int(colour_RGBW[3])
+    green = int(colour_RGBW[2]) + int(colour_RGBW[3])
+    if red >= blue and red > green:
+        blue_index = blue / red
+        green_index = green / red
+        if red > 255:
+            red = 255
+        blue = int(blue_index * red)
+        green = int(green_index * red)
+    elif blue > red and blue >= green:
+        red_index = red / blue
+        green_index = green / blue
+        if blue > 255:
+            blue = 255
+        red = int(red_index * blue)
+        green = int(green_index * blue)
+    elif green >= red and green > blue:
+        red_index = red / green
+        blue_index = blue / green
+        if green > 255:
+            green = 255
+        red = int(red_index * green)
+        blue = int(blue_index * green)
+    else:
+        if red > 255:
+            red = 255
+            blue = 255
+            green = 255
+    return np.array([red, blue, green], dtype=np.uint8)
+

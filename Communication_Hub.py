@@ -29,7 +29,7 @@ def Air_DMX (comms_queue_2, comms_queue_4, kill_switch, framerate, universes):
     sender.start()
     sender.activate_output(1)           # Needs to be made variable. Only hard coded for now
     sender.activate_output(2)
-    sender[1].destination = "127.0.0.1"
+    sender[1].destination = "dans_bedroom.local"
     sender[2].destination = "127.0.0.1"
     while kill_switch.qsize() == 0:
         try:
